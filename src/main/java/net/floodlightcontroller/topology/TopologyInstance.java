@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
 
+import javafx.scene.shape.Arc;
 import net.floodlightcontroller.routing.BroadcastTree;
 import net.floodlightcontroller.routing.Link;
 import net.floodlightcontroller.routing.Route;
@@ -36,6 +37,7 @@ import net.floodlightcontroller.util.ClusterDFS;
 import org.projectfloodlight.openflow.types.DatapathId;
 import org.projectfloodlight.openflow.types.OFPort;
 import org.projectfloodlight.openflow.types.U64;
+import org.sdnplatform.sync.internal.config.Node;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -93,8 +95,12 @@ public class TopologyInstance {
     protected Map<NodePortTuple, Set<Link>> allLinks;
 	//Set of all ports organized by DatapathId. Note that switchPorts map contains only ports with links.
 	protected Map<DatapathId, Set<OFPort>> allPorts;
+    //Set of all the inter-island or "external" links. Also known as portBroadcastDomainLinks in TopologyManager.
+    protected Map<NodePortTuple, Set<Link>> externalLinks;
 	// Maps broadcast ports to DatapathId
     protected Map<DatapathId, Set<OFPort>> broadcastPortMap;
+
+    protected Set<Archipelago> archipelagos;
     
 
     protected class PathCacheLoader extends CacheLoader<RouteId, Route> {
@@ -120,7 +126,8 @@ public class TopologyInstance {
                             Set<NodePortTuple> broadcastDomainPorts,
                             Set<NodePortTuple> tunnelPorts, 
                             Map<NodePortTuple, Set<Link>> allLinks, 
-                            Map<DatapathId, Set<OFPort>> allPorts) {
+                            Map<DatapathId, Set<OFPort>> allPorts,
+                            Map<NodePortTuple, Set<Link>> externalLinks) {
 	
         this.switches = new HashSet<DatapathId>(switchPorts.keySet());
         this.switchPorts = new HashMap<DatapathId, Set<OFPort>>();
@@ -143,7 +150,14 @@ public class TopologyInstance {
         for (NodePortTuple npt : allLinks.keySet()) {
             this.allLinks.put(npt, new HashSet<Link>(allLinks.get(npt)));
         }
-        
+
+        this.externalLinks = new HashMap<NodePortTuple, Set<Link>>();
+        for (NodePortTuple npt : externalLinks.keySet()) {
+            this.externalLinks.put(npt, new HashSet<Link>(externalLinks.get(npt)));
+        }
+
+        this.archipelagos = new HashSet<Archipelago>();
+
         this.broadcastDomainPorts = new HashSet<NodePortTuple>(broadcastDomainPorts);
         this.tunnelPorts = new HashSet<NodePortTuple>(tunnelPorts);
 
@@ -194,6 +208,11 @@ public class TopologyInstance {
 		// The trees are rooted at the destination.
         // Cost for tunnel links and direct links are the same.
 		calculateAllShortestPaths();
+
+        // Compute the archipelagos (def: cluster of islands). An archipelago will
+        // simply be a group of connected islands. Each archipelago will have its own
+        // finiteBroadcastTree which will be randomly chosen.
+        calculateArchipelagos();
 		
 		// Step 5. Compute broadcast tree for the whole topology (needed to avoid loops).
         // Cost for tunnel links are high to discourage use of
@@ -226,7 +245,8 @@ public class TopologyInstance {
 	 * Returns broadcast ports for the given DatapathId
 	 */
     public Set<OFPort> swBroadcastPorts(DatapathId sw){
-    	return this.broadcastPortMap.get(sw);
+        // TODO: Work with archipelagos
+        return this.broadcastPortMap.get(sw);
 
     }
 
@@ -581,7 +601,69 @@ public class TopologyInstance {
         BroadcastTree ret = new BroadcastTree(nexthoplinks, cost);
         return ret;
     }
-    
+
+    private void calculateArchipelagos() {
+        // Iterate through each external link and create/merge archipelagos based on the
+        // islands that each link is connected to
+        Cluster srcCluster = null;
+        Cluster dstCluster = null;
+        Archipelago srcArchipelago = null;
+        Archipelago dstArchipelago = null;
+        Set<Link> links = new HashSet<Link>();
+
+        for (Set<Link> linkset : externalLinks.values()) {
+            links.addAll(linkset);
+        }
+
+        for (Link l : links) {
+            for (Cluster c : clusters) {
+                if(c.getNodes().contains(l.getSrc())) srcCluster = c;
+                if(c.getNodes().contains(l.getDst())) dstCluster = c;
+            }
+            for (Archipelago a : archipelagos) {
+                // Is source cluster a part of an existing archipelago?
+                if(a.isMember(srcCluster)) srcArchipelago = a;
+                // Is destination cluster a part of an existing archipelago?
+                if(a.isMember(dstCluster)) dstArchipelago = a;
+            }
+
+            // Are they both found in an archipelago? If so, then merge the two.
+            if(srcArchipelago != null && dstArchipelago != null && srcArchipelago != dstArchipelago) {
+                srcArchipelago.merge(dstArchipelago);
+                archipelagos.remove(dstArchipelago);
+            }
+
+            // If neither were found in an existing, then form a new archipelago.
+            else if(srcArchipelago == null && dstArchipelago == null) {
+                archipelagos.add(new Archipelago().add(srcCluster).add(dstCluster));
+            }
+
+            // If only one is found in an existing, then add the one not found to the existing.
+            else if(srcArchipelago != null && dstArchipelago == null) {
+                srcArchipelago.add(dstCluster);
+            }
+
+            else if(srcArchipelago == null && dstArchipelago != null) {
+                dstArchipelago.add(srcCluster);
+            }
+
+            srcCluster = null;
+            dstCluster = null;
+            srcArchipelago = null;
+            dstArchipelago = null;
+        }
+
+        // Choose a broadcast tree for each archipelago
+        for (Archipelago a : archipelagos) {
+            for (DatapathId id : destinationRootedFullTrees.keySet()) {
+                if (a.isMember(id)) {
+                    a.setBroadcastTree(destinationRootedFullTrees.get(id));
+                    break;
+                }
+            }
+        }
+    }
+
 	/*
 	 * Dijkstra that calculates destination rooted trees over the entire topology.
 	*/
@@ -669,14 +751,14 @@ public class TopologyInstance {
             }
         }
         
-        Map<DatapathId, Set<Link>> linkDpidMap = new HashMap<DatapathId, Set<Link>>();
-        for (DatapathId s : switches) {
+        Map<DatapathId, Set<Link>> linkDpidMap = new HashMap<DatapathId, Set<Link>>();  // Switches and all associated links
+        for (DatapathId s : switches) {                         // For every switch
             if (switchPorts.get(s) == null) continue;
-            for (OFPort p : switchPorts.get(s)) {
-                NodePortTuple np = new NodePortTuple(s, p);
+            for (OFPort p : switchPorts.get(s)) {               // and all of it's ports
+                NodePortTuple np = new NodePortTuple(s, p);     // create a node port tuple
                 if (allLinks.get(np) == null) continue;
-                for (Link l : allLinks.get(np)) {
-                	if (linkDpidMap.containsKey(s)) {
+                for (Link l : allLinks.get(np)) {               // and get the associated links
+                	if (linkDpidMap.containsKey(s)) {           // Build linkDpidMap
                 		linkDpidMap.get(s).add(l);
                 	}
                 	else {
@@ -686,16 +768,16 @@ public class TopologyInstance {
             }
         }   
         
-        for (DatapathId node : linkDpidMap.keySet()) {
-        	BroadcastTree tree = dijkstra(linkDpidMap, node, linkCost, true);
+        for (DatapathId node : linkDpidMap.keySet()) {                          // For every switch
+        	BroadcastTree tree = dijkstra(linkDpidMap, node, linkCost, true);   // Calculate DRT over topology for each
 
-            destinationRootedFullTrees.put(node, tree);
+            destinationRootedFullTrees.put(node, tree);                         // Add to the map
         }
         
 		//finiteBroadcastTree is randomly chosen in this implementation
-        if (this.destinationRootedFullTrees.size() > 0) {
-			this.finiteBroadcastTree = destinationRootedFullTrees.values().iterator().next();
-        }         	
+//        if (this.destinationRootedFullTrees.size() > 0) {
+//			this.finiteBroadcastTree = destinationRootedFullTrees.values().iterator().next();
+//        }
     }
 
     protected void calculateShortestPathTreeInClusters() {
@@ -734,18 +816,21 @@ public class TopologyInstance {
 	}
 	
     protected void calculateAllBroadcastNodePorts() {
-		if (this.destinationRootedFullTrees.size() > 0) {
-			this.finiteBroadcastTree = destinationRootedFullTrees.values().iterator().next();
-			Map<DatapathId, Link> links = finiteBroadcastTree.getLinks();
-			if (links == null) return;
-			for (DatapathId nodeId : links.keySet()) {
-				Link l = links.get(nodeId);
-				if (l == null) continue;
-				NodePortTuple npt1 = new NodePortTuple(l.getSrc(), l.getSrcPort());
-				NodePortTuple npt2 = new NodePortTuple(l.getDst(), l.getDstPort());
-				this.broadcastNodePorts.add(npt1);
-				this.broadcastNodePorts.add(npt2);
-			}    
+        // TODO: Work with archipelagos
+        if (this.destinationRootedFullTrees.size() > 0) {
+			//this.finiteBroadcastTree = destinationRootedFullTrees.values().iterator().next();
+            for (Archipelago a : archipelagos) {
+                Map<DatapathId, Link> links = a.getBroadcastTree().getLinks();
+                if (links == null) return;
+                for (DatapathId nodeId : links.keySet()) {
+                    Link l = links.get(nodeId);
+                    if (l == null) continue;
+                    NodePortTuple npt1 = new NodePortTuple(l.getSrc(), l.getSrcPort());
+                    NodePortTuple npt2 = new NodePortTuple(l.getDst(), l.getDstPort());
+                    this.broadcastNodePorts.add(npt1);
+                    this.broadcastNodePorts.add(npt2);
+                }
+            }
 		}		
     }
 

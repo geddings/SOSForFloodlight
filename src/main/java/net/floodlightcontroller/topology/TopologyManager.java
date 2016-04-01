@@ -1235,7 +1235,10 @@ public class TopologyManager implements IFloodlightModule, ITopologyService, IRo
 				blockedPorts,
 				openflowLinks,
 				broadcastDomainPorts,
-				tunnelPorts,switchPortLinks,allPorts);
+				tunnelPorts,
+				switchPortLinks,
+				allPorts,
+				portBroadcastDomainLinks);
 
 		nt.compute();
 
