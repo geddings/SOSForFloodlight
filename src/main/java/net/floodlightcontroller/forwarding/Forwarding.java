@@ -387,6 +387,7 @@ public class Forwarding extends ForwardingBase implements IFloodlightModule, IOF
 		OFPacketOut.Builder pob = sw.getOFFactory().buildPacketOut();
 		List<OFAction> actions = new ArrayList<OFAction>();
 		Set<OFPort> broadcastPorts = this.topologyService.getSwitchBroadcastPorts(sw.getId());
+		log.debug("Broadcast ports for switch {}: {}", sw.getId(), broadcastPorts);
 
 		if (broadcastPorts == null) {
 			log.debug("BroadcastPorts returned null. Assuming single switch w/no links.");
