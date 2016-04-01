@@ -26,7 +26,6 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
 
-import javafx.scene.shape.Arc;
 import net.floodlightcontroller.routing.BroadcastTree;
 import net.floodlightcontroller.routing.Link;
 import net.floodlightcontroller.routing.Route;
