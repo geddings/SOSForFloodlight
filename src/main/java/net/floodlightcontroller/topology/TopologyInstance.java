@@ -258,6 +258,7 @@ public class TopologyInstance {
         log.debug("Clusters: {}", clusters);
         log.debug("Destination Rooted Full Trees: {}", destinationRootedFullTrees);
         log.debug("Broadcast Node Ports: {}", broadcastNodePorts);
+        log.debug("Archipelagos: {}", archipelagos);
         log.debug("-----------------------------------------------");  
     }
 
