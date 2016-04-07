@@ -398,6 +398,8 @@ public class Device implements IDevice {
 				if (!portsOnLinks.contains(ap.getPort())) {
 					log.debug("Found 'true' attachment point of {}", ap);
 					trueAttachmentPoint = ap;
+					log.debug("New 'true attachment point {}", trueAttachmentPoint);
+					return;
 				} else {
 					log.trace("Attachment point {} was not the 'true' attachment point", ap);
 				}
