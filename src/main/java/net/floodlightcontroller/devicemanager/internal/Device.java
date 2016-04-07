@@ -126,6 +126,8 @@ public class Device implements IDevice {
 			}
 		}
 		vlanIds = computeVlandIds();
+
+		findTrueAP();
 	}
 
 	/**
@@ -161,6 +163,8 @@ public class Device implements IDevice {
 		this.entityClass = entityClass;
 		Arrays.sort(this.entities);
 		vlanIds = computeVlandIds();
+
+		findTrueAP();
 	}
 
 	/**
@@ -232,6 +236,8 @@ public class Device implements IDevice {
 
 		this.entityClass = device.entityClass;
 		vlanIds = computeVlandIds();
+
+		findTrueAP();
 	}
 
 	private VlanVid[] computeVlandIds() {
