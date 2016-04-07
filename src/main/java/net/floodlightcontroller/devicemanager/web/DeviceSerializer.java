@@ -69,6 +69,9 @@ public class DeviceSerializer extends JsonSerializer<Device> {
         jGen.writeEndArray();
 
         //jGen.writeObjectField("trueAttachmentPoint", device.getTrueAttachmentPoint());
+        jGen.writeArrayFieldStart("trueAttachmentPoint");
+        serializer.defaultSerializeValue(device.getTrueAttachmentPoint(), jGen);
+        jGen.writeEndArray();
 
         jGen.writeNumberField("lastSeen", device.getLastSeen().getTime());
         
