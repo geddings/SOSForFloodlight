@@ -387,8 +387,8 @@ public class Device implements IDevice {
 		return dupAPs;
 	}
 
-	public AttachmentPoint getTrueAttachmentPoint() {
-		return trueAttachmentPoint;
+	public SwitchPort getTrueAttachmentPoint() {
+		return new SwitchPort(trueAttachmentPoint.getSw(), trueAttachmentPoint.getPort());
 	}
 
 	protected void findTrueAP() {
