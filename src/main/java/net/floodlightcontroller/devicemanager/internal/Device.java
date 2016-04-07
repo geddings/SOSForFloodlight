@@ -381,6 +381,9 @@ public class Device implements IDevice {
 		return dupAPs;
 	}
 
+	public AttachmentPoint getTrueAttachmentPoint() {
+		return trueAttachmentPoint;
+	}
 
 	protected void findTrueAP() {
 
