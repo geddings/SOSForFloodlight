@@ -1,8 +1,27 @@
+/**
+ *    Copyright 2013, Big Switch Networks, Inc.
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License"); you may
+ *    not use this file except in compliance with the License. You may obtain
+ *    a copy of the License at
+ *
+ *         http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ *    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ *    License for the specific language governing permissions and limitations
+ *    under the License.
+ **/
+
 package net.floodlightcontroller.linkdiscovery;
 
-import org.codehaus.jackson.map.annotate.JsonSerialize;
-import org.codehaus.jackson.map.ser.ToStringSerializer;
-import org.openflow.util.HexString;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+
+import org.projectfloodlight.openflow.types.DatapathId;
+import org.projectfloodlight.openflow.types.OFPort;
+import org.projectfloodlight.openflow.types.U64;
 
 public interface ILinkDiscovery {
 
@@ -13,13 +32,15 @@ public interface ILinkDiscovery {
         SWITCH_UPDATED("Switch Updated"),
         SWITCH_REMOVED("Switch Removed"),
         PORT_UP("Port Up"),
-        PORT_DOWN("Port Down");
-        
+        PORT_DOWN("Port Down"),
+        TUNNEL_PORT_ADDED("Tunnel Port Added"),
+        TUNNEL_PORT_REMOVED("Tunnel Port Removed");
+
         private String value;
         UpdateOperation(String v) {
             value = v;
         }
-        
+
         @Override
         public String toString() {
             return value;
@@ -27,22 +48,24 @@ public interface ILinkDiscovery {
     }
 
     public class LDUpdate {
-        protected long src;
-        protected short srcPort;
-        protected long dst;
-        protected short dstPort;
+        protected DatapathId src;
+        protected OFPort srcPort;
+        protected DatapathId dst;
+        protected OFPort dstPort;
         protected SwitchType srcType;
+        protected U64 latency;
         protected LinkType type;
         protected UpdateOperation operation;
 
-        public LDUpdate(long src, short srcPort,
-                      long dst, short dstPort,
+        public LDUpdate(DatapathId src, OFPort srcPort,
+        		DatapathId dst, OFPort dstPort, U64 latency,
                       ILinkDiscovery.LinkType type,
                       UpdateOperation operation) {
             this.src = src;
             this.srcPort = srcPort;
             this.dst = dst;
             this.dstPort = dstPort;
+            this.latency = latency;
             this.type = type;
             this.operation = operation;
         }
@@ -53,38 +76,45 @@ public interface ILinkDiscovery {
             this.dst = old.dst;
             this.dstPort = old.dstPort;
             this.srcType = old.srcType;
+            this.latency = old.latency;
             this.type = old.type;
             this.operation = old.operation;
         }
 
         // For updtedSwitch(sw)
-        public LDUpdate(long switchId, SwitchType stype, UpdateOperation oper ){
+        public LDUpdate(DatapathId switchId, SwitchType stype, UpdateOperation oper){
             this.operation = oper;
             this.src = switchId;
             this.srcType = stype;
+            this.latency = U64.ZERO;
         }
 
-        // For port up or port down.
-        public LDUpdate(long sw, short port, UpdateOperation operation) {
+        // For port up or port down; and tunnel port added and removed.
+        public LDUpdate(DatapathId sw, OFPort port, UpdateOperation operation) {
             this.src = sw;
             this.srcPort = port;
             this.operation = operation;
+            this.latency = U64.ZERO;
         }
 
-        public long getSrc() {
+        public DatapathId getSrc() {
             return src;
         }
 
-        public short getSrcPort() {
+        public OFPort getSrcPort() {
             return srcPort;
         }
 
-        public long getDst() {
+        public DatapathId getDst() {
             return dst;
         }
 
-        public short getDstPort() {
+        public OFPort getDstPort() {
             return dstPort;
+        }
+        
+        public U64 getLatency() {
+        	return latency;
         }
 
         public SwitchType getSrcType() {
@@ -109,20 +139,21 @@ public interface ILinkDiscovery {
             case LINK_REMOVED:
             case LINK_UPDATED:
                 return "LDUpdate [operation=" + operation +
-                        ", src=" + HexString.toHexString(src)
-                        + ", srcPort=" + srcPort
-                        + ", dst=" + HexString.toHexString(dst) 
-                        + ", dstPort=" + dstPort
+                        ", src=" + src.toString()
+                        + ", srcPort=" + srcPort.toString()
+                        + ", dst=" + dst.toString()
+                        + ", dstPort=" + dstPort.toString()
+                        + ", latency=" + latency.toString()
                         + ", type=" + type + "]";
             case PORT_DOWN:
             case PORT_UP:
                 return "LDUpdate [operation=" + operation +
-                        ", src=" + HexString.toHexString(src)
-                        + ", srcPort=" + srcPort + "]";
+                        ", src=" + src.toString()
+                        + ", srcPort=" + srcPort.toString() + "]";
             case SWITCH_REMOVED:
             case SWITCH_UPDATED:
                 return "LDUpdate [operation=" + operation +
-                        ", src=" + HexString.toHexString(src) + "]";
+                        ", src=" + src.toString() + "]";
             default:
                 return "LDUpdate: Unknown update.";
             }
@@ -159,4 +190,19 @@ public interface ILinkDiscovery {
         	}
         }
     };
+
+    public enum LinkDirection {
+        UNIDIRECTIONAL {
+            @Override
+            public String toString() {
+                return "unidirectional";
+            }
+        },
+        BIDIRECTIONAL {
+            @Override
+            public String toString() {
+                return "bidirectional";
+            }
+        }
+    }
 }

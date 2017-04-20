@@ -1,16 +1,36 @@
+/**
+ *    Copyright 2013, Big Switch Networks, Inc.
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License"); you may
+ *    not use this file except in compliance with the License. You may obtain
+ *    a copy of the License at
+ *
+ *         http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ *    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ *    License for the specific language governing permissions and limitations
+ *    under the License.
+ **/
+
 package net.floodlightcontroller.linkdiscovery.web;
 
-import java.io.IOException;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
-import org.codehaus.jackson.JsonGenerator;
-import org.codehaus.jackson.JsonProcessingException;
-import org.codehaus.jackson.map.JsonSerializer;
-import org.codehaus.jackson.map.SerializerProvider;
-import org.codehaus.jackson.map.annotate.JsonSerialize;
-import org.openflow.util.HexString;
-
+import net.floodlightcontroller.linkdiscovery.Link;
+import net.floodlightcontroller.linkdiscovery.ILinkDiscovery.LinkDirection;
 import net.floodlightcontroller.linkdiscovery.ILinkDiscovery.LinkType;
-import net.floodlightcontroller.routing.Link;
+
+import org.projectfloodlight.openflow.types.DatapathId;
+import org.projectfloodlight.openflow.types.OFPort;
+import org.projectfloodlight.openflow.types.U64;
+
+import java.io.IOException;
 
 /**
  * This class is both the datastructure and the serializer
@@ -19,47 +39,46 @@ import net.floodlightcontroller.routing.Link;
  */
 @JsonSerialize(using=LinkWithType.class)
 public class LinkWithType extends JsonSerializer<LinkWithType> {
-    public long srcSwDpid;
-    public short srcPort;
-    public int srcPortState;
-    public long dstSwDpid;
-    public short dstPort;
-    public int dstPortState;
+    public DatapathId srcSwDpid;
+    public OFPort srcPort;
+    public DatapathId dstSwDpid;
+    public OFPort dstPort;
     public LinkType type;
+    public LinkDirection direction;
+    public U64 latency;
 
     // Do NOT delete this, it's required for the serializer
     public LinkWithType() {}
-    
+
     public LinkWithType(Link link,
-                        int srcPortState,
-                        int dstPortState,
-                        LinkType type) {
+            LinkType type,
+            LinkDirection direction) {
         this.srcSwDpid = link.getSrc();
         this.srcPort = link.getSrcPort();
-        this.srcPortState = srcPortState;
         this.dstSwDpid = link.getDst();
         this.dstPort = link.getDstPort();
-        this.dstPortState = dstPortState;
         this.type = type;
+        this.direction = direction;
+        this.latency = link.getLatency();
     }
 
-	@Override
-	public void serialize(LinkWithType lwt, JsonGenerator jgen, SerializerProvider arg2) 
-			throws IOException, JsonProcessingException {
-		// You ****MUST*** use lwt for the fields as it's actually a different object.
-		jgen.writeStartObject();
-		jgen.writeStringField("src-switch", HexString.toHexString(lwt.srcSwDpid));
-		jgen.writeNumberField("src-port", lwt.srcPort);
-		jgen.writeNumberField("src-port-state", lwt.srcPortState);
-		jgen.writeStringField("dst-switch", HexString.toHexString(lwt.dstSwDpid));
-		jgen.writeNumberField("dst-port", lwt.dstPort);
-		jgen.writeNumberField("dst-port-state", lwt.dstPortState);
-		jgen.writeStringField("type", lwt.type.toString());
-		jgen.writeEndObject();
-	}
-	
-	@Override
-	public Class<LinkWithType> handledType() {
-		return LinkWithType.class;
-	}
+    @Override
+    public void serialize(LinkWithType lwt, JsonGenerator jgen, SerializerProvider arg2)
+            throws IOException, JsonProcessingException {
+        // You ****MUST*** use lwt for the fields as it's actually a different object.
+        jgen.writeStartObject();
+        jgen.writeStringField("src-switch", lwt.srcSwDpid.toString());
+        jgen.writeNumberField("src-port", lwt.srcPort.getPortNumber());
+        jgen.writeStringField("dst-switch", lwt.dstSwDpid.toString());
+        jgen.writeNumberField("dst-port", lwt.dstPort.getPortNumber());
+        jgen.writeStringField("type", lwt.type.toString());
+        jgen.writeStringField("direction", lwt.direction.toString());
+        jgen.writeNumberField("latency", lwt.latency.getValue()); // Might be an issue if value exceed what unsigned long can hold
+        jgen.writeEndObject();
+    }
+
+    @Override
+    public Class<LinkWithType> handledType() {
+        return LinkWithType.class;
+    }
 }

@@ -1,3 +1,19 @@
+/**
+ *    Copyright 2013, Big Switch Networks, Inc.
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License"); you may
+ *    not use this file except in compliance with the License. You may obtain
+ *    a copy of the License at
+ *
+ *         http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ *    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ *    License for the specific language governing permissions and limitations
+ *    under the License.
+ **/
+
 package net.floodlightcontroller.devicemanager.test;
 
 import static net.floodlightcontroller.devicemanager.IDeviceService.DeviceField.MAC;
@@ -33,7 +49,7 @@ public class MockEntityClassifier extends DefaultEntityClassifier {
     
     @Override
     public IEntityClass classifyEntity(Entity entity) {
-        if (entity.getSwitchDPID() >= 10L) {
+        if (entity.getSwitchDPID().getLong() >= 10L) {
             return testEC;
         }
         return DefaultEntityClassifier.entityClass;
@@ -43,5 +59,4 @@ public class MockEntityClassifier extends DefaultEntityClassifier {
     public EnumSet<IDeviceService.DeviceField> getKeyFields() {
         return EnumSet.of(MAC, VLAN, SWITCH, PORT);
     }
-
 }

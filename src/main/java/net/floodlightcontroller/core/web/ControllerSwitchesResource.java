@@ -1,7 +1,7 @@
 /**
-*    Copyright 2011, Big Switch Networks, Inc. 
+*    Copyright 2011, Big Switch Networks, Inc.
 *    Originally created by David Erickson, Stanford University
-* 
+*
 *    Licensed under the Apache License, Version 2.0 (the "License"); you may
 *    not use this file except in compliance with the License. You may obtain
 *    a copy of the License at
@@ -17,65 +17,69 @@
 
 package net.floodlightcontroller.core.web;
 
-import java.util.Collections;
-import java.util.Iterator;
+import java.util.Set;
+import java.util.HashSet;
 
-import net.floodlightcontroller.core.IFloodlightProviderService;
+import net.floodlightcontroller.core.internal.IOFSwitchService;
 import net.floodlightcontroller.core.IOFSwitch;
-import net.floodlightcontroller.util.FilterIterator;
 
-import org.openflow.util.HexString;
-import org.restlet.data.Form;
-import org.restlet.data.Status;
+import org.projectfloodlight.openflow.protocol.OFVersion;
+import org.projectfloodlight.openflow.types.DatapathId;
 import org.restlet.resource.Get;
 import org.restlet.resource.ServerResource;
+import net.floodlightcontroller.core.web.serializers.DPIDSerializer;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 /**
  * Get a list of switches connected to the controller
  * @author readams
  */
 public class ControllerSwitchesResource extends ServerResource {
-    public static final String DPID_ERROR = 
-            "Invalid Switch DPID: must be a 64-bit quantity, expressed in " + 
-            "hex as AA:BB:CC:DD:EE:FF:00:11";
     
-    @Get("json")
-    public Iterator<IOFSwitch> retrieve() {
-        IFloodlightProviderService floodlightProvider = 
-                (IFloodlightProviderService)getContext().getAttributes().
-                    get(IFloodlightProviderService.class.getCanonicalName());
-
-        Long switchDPID = null;
+    public static final String DPID_ERROR = "Invalid switch DPID string. Must be a 64-bit value in the form 00:11:22:33:44:55:66:77.";
+    public static class DatapathIDJsonSerializerWrapper {
+        private final DatapathId dpid;
+        private final String inetAddress; 
+        private final long connectedSince;
+        private final String version;
+        public DatapathIDJsonSerializerWrapper(DatapathId dpid, String inetAddress, long connectedSince, OFVersion version) {
+            this.dpid = dpid;
+            this.inetAddress = inetAddress;
+            this.connectedSince = connectedSince;
+            this.version = version.toString();
+        }
         
-        Form form = getQuery();
-        String dpid = form.getFirstValue("dpid", true);
-        if (dpid != null) {
-            try {
-                switchDPID = HexString.toLong(dpid);
-            } catch (Exception e) {
-                setStatus(Status.CLIENT_ERROR_BAD_REQUEST, DPID_ERROR);
-                return null;
-            }
+        @JsonSerialize(using=DPIDSerializer.class)
+        public DatapathId getSwitchDPID() {
+            return dpid;
         }
-        if (switchDPID != null) {
-            IOFSwitch sw = 
-                    floodlightProvider.getSwitches().get(switchDPID);
-            if (sw != null)
-                return Collections.singleton(sw).iterator();
-            return Collections.<IOFSwitch>emptySet().iterator();
+        
+        public String getInetAddress() {
+            return inetAddress;
         }
-        final String dpidStartsWith = 
-                form.getFirstValue("dpid__startswith", true);
-        Iterator<IOFSwitch> switer = 
-                floodlightProvider.getSwitches().values().iterator();
-        if (dpidStartsWith != null) {
-            return new FilterIterator<IOFSwitch>(switer) {
-                @Override
-                protected boolean matches(IOFSwitch value) {
-                    return value.getStringId().startsWith(dpidStartsWith);
-                }
-            };
-        } 
-        return switer;
+        
+        public long getConnectedSince() {
+            return connectedSince;
+        }
+        
+        public String getOpenFlowVersion() {
+            return version;
+        }
+    }
+
+    @Get("json")
+    public Set<DatapathIDJsonSerializerWrapper> retrieve() {
+        IOFSwitchService switchService = 
+            (IOFSwitchService) getContext().getAttributes().
+                get(IOFSwitchService.class.getCanonicalName());
+        Set<DatapathIDJsonSerializerWrapper> dpidSets = new HashSet<DatapathIDJsonSerializerWrapper>();
+        for (IOFSwitch sw: switchService.getAllSwitchMap().values()) {
+            dpidSets.add(new DatapathIDJsonSerializerWrapper(sw.getId(), 
+                    sw.getInetAddress().toString(), 
+                    sw.getConnectedSince().getTime(),
+                    sw.getOFFactory().getVersion()));
+
+        }
+        return dpidSets;
     }
 }

@@ -1,4 +1,20 @@
 /**
+ *    Copyright 2013, Big Switch Networks, Inc.
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License"); you may
+ *    not use this file except in compliance with the License. You may obtain
+ *    a copy of the License at
+ *
+ *         http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ *    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ *    License for the specific language governing permissions and limitations
+ *    under the License.
+ **/
+
+/**
  * Performance monitoring package
  */
 package net.floodlightcontroller.perfmon;
@@ -10,17 +26,17 @@ import java.util.List;
 import java.util.Map;
 
 import net.floodlightcontroller.core.FloodlightContext;
+import net.floodlightcontroller.core.IFloodlightProviderService;
 import net.floodlightcontroller.core.IOFMessageListener;
 import net.floodlightcontroller.core.IOFSwitch;
-import net.floodlightcontroller.core.annotations.LogMessageCategory;
-import net.floodlightcontroller.core.annotations.LogMessageDoc;
 import net.floodlightcontroller.core.module.FloodlightModuleContext;
 import net.floodlightcontroller.core.module.FloodlightModuleException;
 import net.floodlightcontroller.core.module.IFloodlightModule;
 import net.floodlightcontroller.core.module.IFloodlightService;
 import net.floodlightcontroller.restserver.IRestApiService;
 
-import org.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,11 +64,11 @@ import org.slf4j.LoggerFactory;
  *    syslog is generated instead
  * 
  */
-@LogMessageCategory("Performance Monitoring")
 public class PktInProcessingTime
     implements IFloodlightModule, IPktInProcessingTimeService {
 
     
+	protected IFloodlightProviderService floodlightProvider;
     // Our dependencies
     private IRestApiService restApi;
     
@@ -83,19 +99,19 @@ public class PktInProcessingTime
     
     @Override
     public void bootstrap(List<IOFMessageListener> listeners) {
-        if (!isInited) {
             ctb = new CumulativeTimeBucket(listeners);
-            isInited = true;
-        }
     }
     
     @Override
     public boolean isEnabled() {
-        return isEnabled && isInited;
+        return isEnabled;
     }
     
     @Override
     public void setEnabled(boolean enabled) {
+    	if(enabled){
+    		bootstrap(floodlightProvider.getListeners().get(OFType.PACKET_IN));
+    	}
         this.isEnabled = enabled;
         logger.debug("Setting module to " + isEnabled);
     }
@@ -130,11 +146,6 @@ public class PktInProcessingTime
     }
     
     @Override
-    @LogMessageDoc(level="WARN",
-            message="Time to process packet-in exceeded threshold: {}",
-            explanation="Time to process packet-in exceeded the configured " +
-            		"performance threshold",
-            recommendation=LogMessageDoc.CHECK_CONTROLLER)
     public void recordEndTimePktIn(IOFSwitch sw, OFMessage m, FloodlightContext cntx) {
         if (isEnabled()) {
             long procTimeNs = System.nanoTime() - startTimePktNs;
@@ -175,21 +186,19 @@ public class PktInProcessingTime
         Collection<Class<? extends IFloodlightService>> l = 
                 new ArrayList<Class<? extends IFloodlightService>>();
         l.add(IRestApiService.class);
+        l.add(IFloodlightProviderService.class);
         return l;
     }
     
     @Override
     public void init(FloodlightModuleContext context)
                                              throws FloodlightModuleException {
+    	floodlightProvider = context
+                .getServiceImpl(IFloodlightProviderService.class);
         restApi = context.getServiceImpl(IRestApiService.class);
     }
     
     @Override
-    @LogMessageDoc(level="INFO",
-        message="Packet processing time threshold for warning" +
-            " set to {time} ms.",
-        explanation="Performance monitoring will log a warning if " +
-    		"packet processing time exceeds the configured threshold")
     public void startUp(FloodlightModuleContext context) {
         // Add our REST API
         restApi.addRestletRoutable(new PerfWebRoutable());

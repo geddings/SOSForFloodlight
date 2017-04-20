@@ -1,11 +1,28 @@
+/**
+ *    Copyright 2013, Big Switch Networks, Inc.
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License"); you may
+ *    not use this file except in compliance with the License. You may obtain
+ *    a copy of the License at
+ *
+ *         http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ *    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ *    License for the specific language governing permissions and limitations
+ *    under the License.
+ **/
+
 package net.floodlightcontroller.virtualnetwork;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
-import org.codehaus.jackson.map.annotate.JsonSerialize;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
 
-import net.floodlightcontroller.util.MACAddress;
+import org.projectfloodlight.openflow.types.MacAddress;
+
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 /**
  * Data structure for storing and outputing information of a virtual network created
@@ -19,8 +36,7 @@ public class VirtualNetwork{
     protected String name; // network name
     protected String guid; // network id
     protected String gateway; // network gateway
-    protected Collection<MACAddress> hosts; // array of hosts explicitly added to this network
-
+	protected Map<String, MacAddress> portToMac; //port's logical namd and the host's mac address connected
     /**
      * Constructor requires network name and id
      * @param name: network name
@@ -30,7 +46,7 @@ public class VirtualNetwork{
         this.name = name;
         this.guid = guid;
         this.gateway = null;
-        this.hosts = new ArrayList<MACAddress>();
+		this.portToMac = new ConcurrentHashMap<String,MacAddress>();
         return;        
     }
 
@@ -56,9 +72,9 @@ public class VirtualNetwork{
      * Adds a host to this network record
      * @param host: MAC address as MACAddress
      */
-    public void addHost(MACAddress host){
-        this.hosts.add(host);
-        return;        
+    public void addHost(String port, MacAddress host){
+        this.portToMac.put(port, host); // ignore old mapping
+        return;         
     }
     
     /**
@@ -66,23 +82,20 @@ public class VirtualNetwork{
      * @param host: MAC address as MACAddress
      * @return boolean: true: removed, false: host not found
      */
-    public boolean removeHost(MACAddress host){
-        Iterator<MACAddress> iter = this.hosts.iterator();
-        while(iter.hasNext()){
-            MACAddress element = iter.next();
-            if(element.equals(host) ){
-                //assuming MAC address for host is unique
-                iter.remove();
-                return true;
-            }                
-        }
-        return false;
+    public boolean removeHost(MacAddress host){
+		for (Entry<String, MacAddress> entry : this.portToMac.entrySet()) {
+			if (entry.getValue().equals(host)){
+				this.portToMac.remove(entry.getKey());
+				return true;
+			}
+		}
+		return false;
     }
     
     /**
      * Removes all hosts from this network record
      */
     public void clearHosts(){
-        this.hosts.clear();
+		this.portToMac.clear();
     }
 }

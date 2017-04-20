@@ -1,88 +1,60 @@
 package net.floodlightcontroller.sos;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 
-public class SOSClient {
-	private int IP_ADDR;
-	private byte[] MAC_ADDR;
-	private SOSAgent MY_AGENT;
-	private short SWITCH_PORT;
-	private ArrayList<SOSConnection> ACTIVE_CONNECTIONS;
+import org.projectfloodlight.openflow.types.IPv4Address;
+import org.projectfloodlight.openflow.types.MacAddress;
+import org.projectfloodlight.openflow.types.TransportPort;
+
+import net.floodlightcontroller.sos.web.SOSClientSerializer;
+
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+
+@JsonSerialize(using=SOSClientSerializer.class)
+public class SOSClient extends SOSDevice implements ISOSClient {
+	private TransportPort sock;
 	
-	public SOSClient() {
-		IP_ADDR = 0;
-		MAC_ADDR = null;
-		MY_AGENT = null;
-		SWITCH_PORT = 0;
-		ACTIVE_CONNECTIONS = new ArrayList<SOSConnection>();
-	}
-	public SOSClient(int ip, byte[] mac) {
-		IP_ADDR = ip;
-		MAC_ADDR = Arrays.copyOf(mac, mac.length);
-		MY_AGENT = null;
-		SWITCH_PORT = 0;
-		ACTIVE_CONNECTIONS = new ArrayList<SOSConnection>();
-	}
-	public SOSClient(int ip, byte[] mac, SOSAgent agent) {
-		IP_ADDR = ip;
-		MAC_ADDR = Arrays.copyOf(mac, mac.length);
-		MY_AGENT = agent;
-		SWITCH_PORT = 0;
-		ACTIVE_CONNECTIONS = new ArrayList<SOSConnection>();
-	}
-	public SOSClient(int ip, byte[] mac, short switchPort) {
-		IP_ADDR = ip;
-		MAC_ADDR = Arrays.copyOf(mac, mac.length);
-		MY_AGENT = null;
-		SWITCH_PORT = switchPort;
-		ACTIVE_CONNECTIONS = new ArrayList<SOSConnection>();
-	}
-	public SOSClient(int ip, byte[] mac, SOSAgent agent, short switchPort) {
-		IP_ADDR = ip;
-		MAC_ADDR = Arrays.copyOf(mac, mac.length);
-		MY_AGENT = agent;
-		SWITCH_PORT = switchPort;
-		ACTIVE_CONNECTIONS = new ArrayList<SOSConnection>();
+	public SOSClient(IPv4Address ip, TransportPort p) {
+		super(SOSDeviceType.CLIENT, ip);
+		this.sock = p;
 	}
 	
-	public boolean addConnection(SOSConnection conn) {
-		if (!ACTIVE_CONNECTIONS.contains(conn)) {
-			return ACTIVE_CONNECTIONS.add(conn);
-		} else {
+	public SOSClient(IPv4Address ip, TransportPort p, MacAddress mac) {
+		super(SOSDeviceType.CLIENT, ip, mac);
+		this.sock = p;
+	}
+	
+	@Override
+	public TransportPort getTcpPort() {
+		return this.sock;
+	}
+	
+	@Override
+	public String toString() {
+		return "SOSClient [ " + super.toString()  + " sock=" + sock.toString() + "]";
+	}
+	
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = super.hashCode();
+		result = prime * result + ((sock == null) ? 0 : sock.hashCode());
+		return result;
+	}
+	
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (!super.equals(obj))
 			return false;
-		}
+		if (getClass() != obj.getClass())
+			return false;
+		SOSClient other = (SOSClient) obj;
+		if (sock == null) {
+			if (other.sock != null)
+				return false;
+		} else if (!sock.equals(other.sock))
+			return false;
+		return true;
 	}
-	public boolean removeConnection(SOSConnection conn) {
-		return ACTIVE_CONNECTIONS.remove(conn);
-	}
-	
-	public void setIPAddr(int ip) {
-		IP_ADDR = ip;
-	}
-	public int getIPAddr() {
-		return IP_ADDR;
-	}
-	
-	public void setMACAddr(byte[] mac) {
-		MAC_ADDR = Arrays.copyOf(mac, mac.length);
-	}
-	public byte[] getMACAddr() {
-		return MAC_ADDR;
-	}
-	
-	public void setAgent(SOSAgent agent) {
-		MY_AGENT = agent;
-	}
-	public SOSAgent getAgent() {
-		return MY_AGENT;
-	}
-	
-	public void setSwitchPort(short port) {
-		SWITCH_PORT = port;
-	}
-	public short getSwitchPort() {
-		return SWITCH_PORT;
-	}
-	
 }

@@ -1,176 +1,306 @@
 package net.floodlightcontroller.sos;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
-import net.floodlightcontroller.packet.IPv4;
+import org.projectfloodlight.openflow.types.TransportPort;
 
-public class SOSConnection {
-	private SOSClient SRC_CLIENT;
-	private SOSAgent SRC_AGENT;
-	private short SRC_PORT;
-	private SOSSwitch SRC_AGENT_SWITCH;
-	private SOSClient DST_CLIENT;
-	private SOSAgent DST_AGENT;
-	private short DST_PORT;
-	private short DST_AGENT_L4PORT;
-	private SOSSwitch DST_AGENT_SWITCH;
-	private SOSSwitch SRC_NTWK_SWITCH;
-	private SOSSwitch DST_NTWK_SWITCH;
-	private UUID TRANSFER_ID;
-	private int NUM_PARALLEL_SOCKETS;
-	private int QUEUE_CAPACITY;
-	private int BUFFER_SIZE;
-	private ArrayList<String> FLOW_NAMES;
+import net.floodlightcontroller.sos.web.SOSConnectionSerializer;
+
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+
+@JsonSerialize(using=SOSConnectionSerializer.class)
+public class SOSConnection implements ISOSConnection {
+	private SOSRoute clientToAgent;
+	private SOSRoute agentToAgent;
+	private SOSRoute serverToAgent;
+	private TransportPort serverAgentPort;
+	private UUID transferId;
+	private int numParallelSockets;
+	private int queueCapacity;
+	private int bufferSize;
+	private int flowTimeout;
+	private Set<String> flowNames;
+	private Date initTime;
+	private Date startTime;
+	private Date stopTime;
+	private ISOSTerminationStats stats;
+	private List<ISOSTransferStats> client_side_transfer_stats;
+	private List<ISOSTransferStats> server_side_transfer_stats;
 	
-	public SOSConnection(SOSClient srcC, SOSAgent srcA, short srcP, SOSSwitch srcS, 
-			SOSClient dstC, SOSAgent dstA, short dstP, SOSSwitch dstS, SOSSwitch srcNtwkS, SOSSwitch dstNtwkS, int numSockets, int queueCap, int bufSize) {
-		SRC_CLIENT = srcC;
-		SRC_AGENT = srcA;
-		SRC_PORT = srcP;
-		SRC_AGENT_SWITCH = srcS;
-		DST_CLIENT = dstC;
-		DST_AGENT = dstA;
-		DST_PORT = dstP;
-		DST_AGENT_L4PORT = 0; // This cannot be known when the first TCP packet is received. It will be learned on the dst-side
-		DST_AGENT_SWITCH = dstS;
-		SRC_NTWK_SWITCH = srcNtwkS;
-		DST_NTWK_SWITCH = dstNtwkS;
-		TRANSFER_ID = UUID.randomUUID();
-		NUM_PARALLEL_SOCKETS = numSockets;
-		QUEUE_CAPACITY = queueCap;
-		BUFFER_SIZE = bufSize;
-		FLOW_NAMES = new ArrayList<String>();
+	public SOSConnection(SOSRoute clientToAgent, SOSRoute interAgent,
+			SOSRoute serverToAgent, int numSockets, 
+			int queueCapacity, int bufferSize,
+			int flowTimeout) {
+		if (clientToAgent.getRouteType() != SOSRouteType.CLIENT_2_AGENT) {
+			throw new IllegalArgumentException("SOSRoute clientToAgent must be of type client-to-agent");
+		}
+		this.clientToAgent = clientToAgent;
+		if (interAgent.getRouteType() != SOSRouteType.AGENT_2_AGENT) {
+			throw new IllegalArgumentException("SOSRoute interAgent must be of type agent-to-agent");
+		}
+		this.agentToAgent = interAgent;
+		if (serverToAgent.getRouteType() != SOSRouteType.SERVER_2_AGENT) {
+			throw new IllegalArgumentException("SOSRoute serverToAgent must be of type server-to-agent");
+		}
+		this.serverToAgent = serverToAgent;
+		this.serverAgentPort = TransportPort.NONE; /* This cannot be known when the first TCP packet is received. It will be learned on the server-side */
+		this.transferId = UUID.randomUUID();
+		((SOSAgent) this.clientToAgent.getDstDevice()).addTransferId(this.transferId); /* agents can be shared; update them w/UUID */
+		((SOSAgent) this.serverToAgent.getDstDevice()).addTransferId(this.transferId);
+		this.numParallelSockets = numSockets;
+		this.queueCapacity = queueCapacity;
+		this.bufferSize = bufferSize;
+		this.flowTimeout = flowTimeout;
+		this.flowNames = new HashSet<String>();
+		this.initTime = new Date();
+		this.stats = null;
+		this.server_side_transfer_stats = new ArrayList<ISOSTransferStats>();
+		this.client_side_transfer_stats = new ArrayList<ISOSTransferStats>();
 	}
 	
 	/**
-	 * Floodlight stores switch and L4 port numbers as shorts. In Java, there is no such thing
-	 * as an unsigned short. This means all port numbers greater than 32768 or 2^15 (for 2-byte
-	 * shorts) will appear as negative numbers. This poses a problem when printing the ports in
-	 * the debugger or converting them to strings (such as the SFP does). If you have a port
-	 * that ***might*** be larger than the largest possible number in a signed short (given by
-	 * Short.MAX_VALUE), use these methods to make sure the port value does not wrap around and
-	 * appear negative as a signed short. The SFP is patched to fix this issue. Use these functions
-	 * for local port operations that require the port number appear as positive.
-	 * 
-	 * @param port
+	 * The time this connection was instantiated
+	 * at the client side of the network.
+	 */
+	@Override
+	public Date getInitTime() {
+		return this.initTime;
+	}
+	
+	/**
+	 * The time the agent handshake completed and
+	 * all flows were inserted necessary for file
+	 * transfer.
+	 */
+	@Override
+	public Date getStartTime() {
+		return this.startTime;
+	}
+	
+	/**
+	 * The time this connection was terminated.
+	 */
+	@Override
+	public Date getStopTime() {
+		return this.stopTime;
+	}
+	
+	public void setStopTime() {
+		this.stopTime = new Date();
+	}
+	
+	/**
+	 * First hop is the OpenFlow switch nearest
+	 * the client; last hop is the OpenFlow switch
+	 * nearest the client-side agent.
 	 * @return
 	 */
-	public int portToInteger(short port) {
-		int temp = (int) port;
-    	if (temp < 0 ) {
-    		temp = Short.MAX_VALUE*2 + temp + 2;
-    	}
-    	return temp;
-	}
-	public String portToString(short port) {
-    	return Integer.toString(portToInteger(port));
+	@Override
+	public SOSRoute getClientSideRoute() {
+		return this.clientToAgent;
 	}
 	
-	public short getDstAgentL4Port() {
-		return DST_AGENT_L4PORT;
-	}
-	public void setDstAgentL4Port(short l4port) {
-		DST_AGENT_L4PORT = l4port;
-	}
-	
-	public SOSSwitch getSrcAgentSwitch() {
-		return SRC_AGENT_SWITCH;
-	}
-	public SOSSwitch getDstAgentSwitch() {
-		return DST_AGENT_SWITCH;
-	}
-	public SOSSwitch getSrcNtwkSwitch() {
-		return SRC_NTWK_SWITCH;
-	}
-	public SOSSwitch getDstNtwkSwitch() {
-		return DST_NTWK_SWITCH;
+	/**
+	 * First hop is the OpenFlow switch nearest
+	 * the client-side agent; last hop is the 
+	 * OpenFlow switch nearest the server-side agent.
+	 * @return
+	 */
+	@Override
+	public SOSRoute getInterAgentRoute() {
+		return this.agentToAgent;
 	}
 	
-	public SOSAgent getSrcAgent() {
-		return SRC_AGENT;
-	}
-	public SOSAgent getDstAgent() {
-		return DST_AGENT;
-	}
-	
-	public SOSClient getSrcClient() {
-		return SRC_CLIENT;
-	}
-	public SOSClient getDstClient() {
-		return DST_CLIENT;
+	/**
+	 * First hop is the OpenFlow switch nearest
+	 * the server; last hop is the OpenFlow switch
+	 * nearest the server-side agent.
+	 * @return
+	 */
+	@Override
+	public SOSRoute getServerSideRoute() {
+		return this.serverToAgent;
 	}
 	
-	public short getSrcPort() {
-		return SRC_PORT;
-	}
-	public short getDstPort() {
-		return DST_PORT;
+	@Override
+	public TransportPort getServerSideAgentTcpPort() {
+		return serverAgentPort;
 	}
 	
+	public void setServerSideAgentTcpPort(TransportPort port) {
+		this.serverAgentPort = port;
+		this.startTime = new Date(); /* When the agents completed handshake */
+	}
+	
+	public void setTerminationStats(ISOSTerminationStats stats) {
+		this.stats = stats;
+	}
+	
+	@Override
+	public SOSAgent getClientSideAgent() {
+		return (SOSAgent) this.clientToAgent.getDstDevice();
+	}
+	
+	@Override
+	public SOSAgent getServerSideAgent() {
+		return (SOSAgent) this.serverToAgent.getDstDevice();
+	}
+	
+	@Override
+	public SOSClient getClient() {
+		return (SOSClient) this.clientToAgent.getSrcDevice();
+	}
+	
+	@Override
+	public SOSServer getServer() {
+		return (SOSServer) this.serverToAgent.getSrcDevice();
+	}
+	
+	@Override
 	public UUID getTransferID() {
-		return TRANSFER_ID;
+		return transferId;
 	}
 	
+	@Override
 	public int getNumParallelSockets() {
-		return NUM_PARALLEL_SOCKETS;
+		return numParallelSockets;
 	}
 	
+	@Override
 	public int getQueueCapacity() {
-		return QUEUE_CAPACITY;
+		return queueCapacity;
 	}
 	
+	@Override
 	public int getBufferSize() {
-		return BUFFER_SIZE;
+		return bufferSize;
 	}
 	
-	public ArrayList<String> getFlowNames() {
-		return FLOW_NAMES;
+	@Override
+	public int getFlowTimeout() {
+		return flowTimeout;
 	}
-	public void removeFlow(String flowName) {
-		FLOW_NAMES.remove(flowName);
+	
+	/**
+	 * The final stats of a transfer.
+	 */
+	@Override 
+	public ISOSTerminationStats getTerminationStats() {
+		return stats;
 	}
-	public void removeFlows() {
-		FLOW_NAMES.clear();
+	
+	/**
+	 * The periodic stats of a transfer.
+	 */
+	@Override
+	public List<ISOSTransferStats> getServerSideTransferStats() {
+		return Collections.unmodifiableList(this.server_side_transfer_stats);
 	}
-	public void addFlow(String flowName) {
-		if (!FLOW_NAMES.contains(flowName)) {
-			FLOW_NAMES.add(flowName);
+	
+	/**
+	 * The periodic stats of a transfer.
+	 */
+	@Override
+	public List<ISOSTransferStats> getClientSideTransferStats() {
+		return Collections.unmodifiableList(this.client_side_transfer_stats);
+	}
+	
+	public void updateTransferStats(ISOSTransferStats newStats) {
+		boolean isUpdate = false;
+		if (newStats.isClientSideAgent()) {
+			/* we count down, since if we are updating, it should be at the end */
+			for (int i = client_side_transfer_stats.size() - 1; i >= 0; i--) {
+				if (client_side_transfer_stats.get(i).getCollectionTime() == newStats.getCollectionTime()) {
+					((SOSTransferStats) client_side_transfer_stats.get(i)).appendStats(newStats);
+					isUpdate = true;
+					break;
+				}
+			}
+			if (!isUpdate) {
+				this.client_side_transfer_stats.add(newStats);
+			}
+		} else {
+			for (int i = server_side_transfer_stats.size() - 1; i >= 0; i--) {
+				if (server_side_transfer_stats.get(i).getCollectionTime() == newStats.getCollectionTime()) {
+					((SOSTransferStats) server_side_transfer_stats.get(i)).appendStats(newStats);
+					isUpdate = true;
+					break;
+				}
+			}
+			if (!isUpdate) {
+				this.server_side_transfer_stats.add(newStats);
+			}
 		}
 	}
-	public void addFlows(ArrayList<String> flowNames) {
+	
+	public Set<String> getFlowNames() {
+		return flowNames;
+	}
+	
+	public void removeFlow(String flowName) {
+		flowNames.remove(flowName);
+	}
+	
+	public void removeFlows() {
+		flowNames.clear();
+	}
+	
+	public void addFlow(String flowName) {
+		if (!flowNames.contains(flowName)) {
+			flowNames.add(flowName);
+		}
+	}
+	
+	public void addFlows(Set<String> flowNames) {
 		for (String flow : flowNames) {
 			addFlow(flow);
 		}
 	}
-	public void replaceFlowsWith(ArrayList<String> flowNames) {
-		removeFlows();
-		addFlows(flowNames);
-	}
 	
+	public String getName() {
+		return transferId.toString();
+	}
+
 	@Override
 	public String toString() {
-		/*
-		SRC_PORT = srcP;
-		DST_PORT = dstP;
-		FLOW_NAMES = new ArrayList<String>();*/
-		String output;
-		output = "Transfer ID: " + TRANSFER_ID.toString() + "\r\n" +
-					"|| Sockets: " + NUM_PARALLEL_SOCKETS + "\r\n" +
-					"Queue Capacity: " + QUEUE_CAPACITY + "\r\n" +
-					"Buffer Size: " + BUFFER_SIZE + "\r\n" +
-					"Source Agent Switch: " + SRC_AGENT_SWITCH.getSwitch().getStringId() + "\r\n" +
-					"Source Network Switch: " + SRC_NTWK_SWITCH.getSwitch().getStringId() + "\r\n" +
-					"Destination Agent Switch: " + DST_AGENT_SWITCH.getSwitch().getStringId() + "\r\n" +
-					"Destination Network Switch: " + DST_NTWK_SWITCH.getSwitch().getStringId() + "\r\n" +
-					"Source Agent: (" + IPv4.fromIPv4Address(SRC_AGENT.getIPAddr()) + ", " + portToString(SRC_AGENT.getSwitchPort()) + ")\r\n" +
-					"Destination Agent: (" + IPv4.fromIPv4Address(DST_AGENT.getIPAddr()) + ", " + portToString(DST_AGENT.getSwitchPort()) + ")\r\n" +
-					"Source Client: (" + IPv4.fromIPv4Address(SRC_CLIENT.getIPAddr()) + ", " + portToString(SRC_CLIENT.getSwitchPort()) + ")\r\n" +
-					"Destination Client: (" + IPv4.fromIPv4Address(DST_CLIENT.getIPAddr()) + ", " + portToString(DST_CLIENT.getSwitchPort()) + ")\r\n" +
-					"Source L4 Port: " + portToString(SRC_PORT) + "\r\n" +
-					"Destination L4 Port: " + portToString(DST_PORT) + "\r\n" +
-		    		"Destination Agent L4 Port: " + portToString(DST_AGENT_L4PORT) + "\r\n";
+		return "SOSConnection [clientToAgent=" + clientToAgent
+				+ ", agentToAgent=" + agentToAgent + ", serverToAgent="
+				+ serverToAgent + ", serverAgentPort="
+				+ serverAgentPort + ", transferId=" + transferId
+				+ ", numParallelSockets=" + numParallelSockets
+				+ ", queueCapacity=" + queueCapacity + ", bufferSize="
+				+ bufferSize + ", flowTimeout=" + flowTimeout + ", flowNames=" + flowNames + "]";
+	}
 
-		return output;
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result
+				+ ((transferId == null) ? 0 : transferId.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		SOSConnection other = (SOSConnection) obj;
+		if (transferId == null) {
+			if (other.transferId != null)
+				return false;
+		} else if (!transferId.equals(other.transferId))
+			return false;
+		return true;
 	}
 }

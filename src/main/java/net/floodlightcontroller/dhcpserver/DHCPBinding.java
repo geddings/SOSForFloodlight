@@ -1,13 +1,7 @@
 package net.floodlightcontroller.dhcpserver;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-
-import net.floodlightcontroller.packet.IPv4;
-import net.floodlightcontroller.packet.Ethernet;
-import net.floodlightcontroller.util.MACAddress;
-
-import java.lang.String;
+import org.projectfloodlight.openflow.types.IPv4Address;
+import org.projectfloodlight.openflow.types.MacAddress;
 
 /**
  * The class representing a DHCP Binding -- MAC and IP.
@@ -24,151 +18,34 @@ import java.lang.String;
  * @author Ryan Izard (rizard@g.clemson.edu)
  */
 public class DHCPBinding {
-	
-	public static final int IP_ADDRESS_LENGTH = 4;
-	public static final int IP_ADDRESS_STRING_LENGTH_MAX = 15;
-	public static final int IP_ADDRESS_STRING_LENGTH_MIN = 7;
-	public static final int MAC_ADDRESS_LENGTH = (int) Ethernet.DATALAYER_ADDRESS_LENGTH;
-	public static final int MAC_ADDRESS_STRING_LENGTH = 17;
-	
-	private ArrayList<byte[]> MACS;
-	private byte[] CURRENT_MAC;
-	private byte[] IP = new byte[IP_ADDRESS_LENGTH];
+	private MacAddress MAC = MacAddress.NONE;
+	private IPv4Address IP = IPv4Address.NONE;
 	private boolean LEASE_STATUS;
 	private boolean PERMANENT_LEASE;
-	
-	private ArrayList<String> FLOWS;
-	private String HOME_SWITCH;
 	
 	private long LEASE_START_TIME_SECONDS;
 	private long LEASE_DURATION_SECONDS;
 	
-	protected DHCPBinding(byte[] ip, ArrayList<byte[]> macs) {
-		this.MACS = new ArrayList<byte[]>();
-		for (int i = 0; i < macs.size(); i++) {
-			this.MACS.add(Arrays.copyOf(macs.get(i), MAC_ADDRESS_LENGTH));
-		}
-		this.CURRENT_MAC = null;
+	protected DHCPBinding(IPv4Address ip, MacAddress mac) {
+		this.setMACAddress(mac);
 		this.setIPv4Addresss(ip);
 		this.setLeaseStatus(false);
-		FLOWS = new ArrayList<String>();
-		this.FLOWS.add("");
-		this.HOME_SWITCH = "";
-	}
-	protected DHCPBinding(byte[] ip, byte[] mac) {
-		this.MACS = new ArrayList<byte[]>();
-		this.MACS.add(Arrays.copyOf(mac, MAC_ADDRESS_LENGTH));
-		this.CURRENT_MAC = Arrays.copyOf(mac, MAC_ADDRESS_LENGTH);
-		this.setIPv4Addresss(ip);
-		this.setLeaseStatus(false);
-		FLOWS = new ArrayList<String>();
-		this.FLOWS.add("");
-		this.HOME_SWITCH = "";
 	}
 	
-	public String getHomeSwitch() {
-		return HOME_SWITCH;
-	}
-	
-	public void setHomeSwitch(String dpid) {
-		HOME_SWITCH = dpid;
-	}
-	
-	public String getFlowName() {
-		if (FLOWS.size() == 0) {
-			return null;
-		} else {
-			return FLOWS.get(0);
-		}
-	}
-	
-	public void setFlowName(String flowName) {
-		FLOWS.clear();
-		FLOWS.add(flowName);
-	}
-	
-	public byte[] getIPv4AddressBytes() {
+	public IPv4Address getIPv4Address() {
 		return IP;
 	}
 	
-	public String getIPv4AddresString() {
-		return IPv4.fromIPv4Address(IPv4.toIPv4Address(IP));
+	public MacAddress getMACAddress() {
+		return MAC;
 	}
 	
-	public byte[] getMACAddressBytes(int index) {
-		return MACS.get(index);
+	private void setIPv4Addresss(IPv4Address ip) {
+		IP = ip; 
 	}
 	
-	public byte[] getCurrentMACAddressBytes() {
-		return CURRENT_MAC;
-	}
-	
-	public void setCurrentMACAddressBytes(byte[] mac) {
-		CURRENT_MAC = Arrays.copyOf(mac, MAC_ADDRESS_LENGTH);
-	}
-	
-	public String getCurrentMACAddressString() {
-		return MACAddress.valueOf(CURRENT_MAC).toString();
-	}
-	
-	public String getMACAddressString(int index) {
-		return MACAddress.valueOf(MACS.get(index)).toString();
-	}
-	public ArrayList<byte[]> getMACAddresses() {
-		return MACS;
-	}
-	public String getMACAddressesString() {
-		String macString = "";
-		for (byte[] mac : MACS) {
-			if (macString.isEmpty()) {
-				macString = MACAddress.valueOf(mac).toString();
-			} else {
-				macString = macString + ", " + MACAddress.valueOf(mac).toString();
-			}
-		}
-		return macString;
-	}
-	
-	public boolean isMACMemberOf(byte[] mac) {
-		for (byte[] test : MACS) {
-			if (Arrays.equals(test, mac)) {
-				return true;
-			}
-		}
-		return false;
-	}
-	public int getNumberOfMACAddresses() {
-		return MACS.size();
-	}
-	
-	private void setIPv4Addresss(byte[] ip) {
-		IP = Arrays.copyOf(ip, IP_ADDRESS_LENGTH); 
-	}
-	
-	public void addMACAddress(byte[] mac) {
-		if (!MACS.contains(mac)) {
-			MACS.add(Arrays.copyOf(mac, MAC_ADDRESS_LENGTH));
-		}
-		CURRENT_MAC = Arrays.copyOf(mac, MAC_ADDRESS_LENGTH);
-	}
-	public void addMACAddress(String mac) {
-		if (!MACS.contains(Ethernet.toMACAddress(mac))) {
-			MACS.add(Ethernet.toMACAddress(mac));
-		}
-		CURRENT_MAC = Ethernet.toMACAddress(mac);
-	}
-	public void addMACAddresses(ArrayList<byte[]> macs) {
-		for (byte[] mac : macs) {
-			MACS.add(Arrays.copyOf(mac, MAC_ADDRESS_LENGTH));
-		}
-	}
-	public void setMACAddresses(ArrayList<byte[]> macs) {
-		clearMACAddresses();
-		addMACAddresses(macs);
-	}
-	public void clearMACAddresses() {
-		MACS.clear();
-		CURRENT_MAC = null;
+	public void setMACAddress(MacAddress mac) {
+		MAC = mac;
 	}
 	
 	public boolean isActiveLease() {
@@ -212,6 +89,53 @@ public class DHCPBinding {
 	protected boolean cancelLease() {
 		this.clearLeaseTimes();
 		this.setLeaseStatus(false);
+		return true;
+	}
+	
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((IP == null) ? 0 : IP.hashCode());
+		result = prime
+				* result
+				+ (int) (LEASE_DURATION_SECONDS ^ (LEASE_DURATION_SECONDS >>> 32));
+		result = prime
+				* result
+				+ (int) (LEASE_START_TIME_SECONDS ^ (LEASE_START_TIME_SECONDS >>> 32));
+		result = prime * result + (LEASE_STATUS ? 1231 : 1237);
+		result = prime * result + ((MAC == null) ? 0 : MAC.hashCode());
+		result = prime * result + (PERMANENT_LEASE ? 1231 : 1237);
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		DHCPBinding other = (DHCPBinding) obj;
+		if (IP == null) {
+			if (other.IP != null)
+				return false;
+		} else if (!IP.equals(other.IP))
+			return false;
+		if (LEASE_DURATION_SECONDS != other.LEASE_DURATION_SECONDS)
+			return false;
+		if (LEASE_START_TIME_SECONDS != other.LEASE_START_TIME_SECONDS)
+			return false;
+		if (LEASE_STATUS != other.LEASE_STATUS)
+			return false;
+		if (MAC == null) {
+			if (other.MAC != null)
+				return false;
+		} else if (!MAC.equals(other.MAC))
+			return false;
+		if (PERMANENT_LEASE != other.PERMANENT_LEASE)
+			return false;
 		return true;
 	}
 }

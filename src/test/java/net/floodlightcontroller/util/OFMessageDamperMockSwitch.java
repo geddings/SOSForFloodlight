@@ -1,349 +1,352 @@
+/**
+ *    Copyright 2013, Big Switch Networks, Inc.
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License"); you may
+ *    not use this file except in compliance with the License. You may obtain
+ *    a copy of the License at
+ *
+ *         http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ *    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ *    License for the specific language governing permissions and limitations
+ *    under the License.
+ **/
+
 package net.floodlightcontroller.util;
 
 import static org.junit.Assert.*;
-import java.io.IOException;
 
+import java.net.SocketAddress;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Future;
+import java.util.Set;
 
-import net.floodlightcontroller.core.FloodlightContext;
-import net.floodlightcontroller.core.IOFMessageListener;
+import net.floodlightcontroller.core.IOFConnection;
 import net.floodlightcontroller.core.IOFSwitch;
-import net.floodlightcontroller.core.IFloodlightProviderService.Role;
+import net.floodlightcontroller.core.LogicalOFMessageCategory;
+import net.floodlightcontroller.core.SwitchDescription;
+import net.floodlightcontroller.core.internal.OFConnection;
+import net.floodlightcontroller.core.internal.TableFeatures;
 
-import org.jboss.netty.channel.Channel;
-import org.openflow.protocol.OFFeaturesReply;
-import org.openflow.protocol.OFMessage;
-import org.openflow.protocol.OFPhysicalPort;
-import org.openflow.protocol.OFStatisticsRequest;
-import org.openflow.protocol.statistics.OFDescriptionStatistics;
-import org.openflow.protocol.statistics.OFStatistics;
+import org.projectfloodlight.openflow.protocol.OFActionType;
+import org.projectfloodlight.openflow.protocol.OFCapabilities;
+import org.projectfloodlight.openflow.protocol.OFControllerRole;
+import org.projectfloodlight.openflow.protocol.OFFactory;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFPortDesc;
+import org.projectfloodlight.openflow.protocol.OFRequest;
+import org.projectfloodlight.openflow.protocol.OFStatsReply;
+import org.projectfloodlight.openflow.protocol.OFStatsRequest;
+import org.projectfloodlight.openflow.types.DatapathId;
+import org.projectfloodlight.openflow.types.OFPort;
+import org.projectfloodlight.openflow.types.TableId;
+import org.projectfloodlight.openflow.types.U64;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.ListenableFuture;
 
 
 /**
  * A mock implementation of IFOSwitch we use for {@link OFMessageDamper}
- * 
+ *
  * We need to mock equals() and hashCode() but alas, EasyMock doesn't support
  * this. Sigh. And of course this happens to be the interface with the most
- * methods. 
+ * methods.
  * @author gregor
  *
  */
 public class OFMessageDamperMockSwitch implements IOFSwitch {
     OFMessage writtenMessage;
-    FloodlightContext writtenContext;
-    
+
     public OFMessageDamperMockSwitch() {
         reset();
     }
-    
+
     /* reset this mock. I.e., clear the stored message previously written */
     public void reset() {
         writtenMessage = null;
-        writtenContext = null;
     }
-    
-    /* assert that a message was written to this switch and that the 
-     * written message and context matches the expected values 
+
+    /* assert that a message was written to this switch and that the
+     * written message and context matches the expected values
      * @param expected
-     * @param expectedContext
      */
-    public void assertMessageWasWritten(OFMessage expected, 
-                                        FloodlightContext expectedContext) {
+    public void assertMessageWasWritten(OFMessage expected) {
         assertNotNull("No OFMessage was written", writtenMessage);
         assertEquals(expected, writtenMessage);
-        assertEquals(expectedContext, writtenContext);
     }
-    
+
     /*
-     * assert that no message was written 
+     * assert that no message was written
      */
     public void assertNoMessageWritten() {
-        assertNull("OFMessage was written but didn't expect one", 
+        assertNull("OFMessage was written but didn't expect one",
                       writtenMessage);
-        assertNull("There was a context but didn't expect one", 
-                      writtenContext);
     }
-    
+
     /*
      * use hashCode() and equals() from Object
      */
-    
-    
+
+
     //-------------------------------------------------------
     // IOFSwitch: mocked methods
-    @Override
-    public void write(OFMessage m, FloodlightContext bc) throws IOException {
-        assertNull("write() called but already have message", writtenMessage);
-        assertNull("write() called but already have context", writtenContext);
-        writtenContext = bc;
-        writtenMessage = m;
-    }
-    
+
+
     //-------------------------------------------------------
     // IOFSwitch: not-implemented methods
-    @Override
-    public void write(List<OFMessage> msglist, FloodlightContext bc) 
-            throws IOException {
-        assertTrue("Unexpected method call", false);
-    }
-    
-    @Override
-    public void disconnectOutputStream() {
-        assertTrue("Unexpected method call", false);
-    }
-    
-    @Override
-    public Channel getChannel() {
-        assertTrue("Unexpected method call", false);
-        return null;
-    }
-    
-    @Override
-    public void setFeaturesReply(OFFeaturesReply featuresReply) {
-        assertTrue("Unexpected method call", false);
-    }
-    
-    @Override
-    public void setSwitchProperties(OFDescriptionStatistics description) {
-        assertTrue("Unexpected method call", false);
-        // TODO Auto-generated method stub
-    }
-    
-    @Override
-    public Collection<OFPhysicalPort> getEnabledPorts() {
-        assertTrue("Unexpected method call", false);
-        return null;
-    }
-    
-    @Override
-    public Collection<Short> getEnabledPortNumbers() {
-        assertTrue("Unexpected method call", false);
-        return null;
-    }
-    
-    @Override
-    public OFPhysicalPort getPort(short portNumber) {
-        assertTrue("Unexpected method call", false);
-        return null;
-    }
-    
-    @Override
-    public OFPhysicalPort getPort(String portName) {
-        assertTrue("Unexpected method call", false);
-        return null;
-    }
-    
-    @Override
-    public void setPort(OFPhysicalPort port) {
-        assertTrue("Unexpected method call", false);
-    }
-    
-    @Override
-    public void deletePort(short portNumber) {
-        assertTrue("Unexpected method call", false);
-    }
-    
-    @Override
-    public void deletePort(String portName) {
-        assertTrue("Unexpected method call", false);
-    }
-    
-    @Override
-    public Collection<OFPhysicalPort> getPorts() {
-        assertTrue("Unexpected method call", false);
-        return null;
-    }
-    
-    @Override
-    public boolean portEnabled(short portName) {
-        assertTrue("Unexpected method call", false);
-        return false;
-    }
-    
+
+
     @Override
     public boolean portEnabled(String portName) {
         assertTrue("Unexpected method call", false);
         return false;
     }
-    
+
     @Override
-    public boolean portEnabled(OFPhysicalPort port) {
+    public DatapathId getId() {
         assertTrue("Unexpected method call", false);
-        return false;
+        return DatapathId.NONE;
     }
-    
+
     @Override
-    public long getId() {
-        assertTrue("Unexpected method call", false);
-        return 0;
-    }
-    
-    @Override
-    public String getStringId() {
+    public SocketAddress getInetAddress() {
         assertTrue("Unexpected method call", false);
         return null;
     }
-    
+
     @Override
     public Map<Object, Object> getAttributes() {
         assertTrue("Unexpected method call", false);
         return null;
     }
-    
+
     @Override
     public Date getConnectedSince() {
         assertTrue("Unexpected method call", false);
         return null;
     }
-    
-    @Override
-    public int getNextTransactionId() {
-        assertTrue("Unexpected method call", false);
-        return 0;
-    }
-    
-    @Override
-    public Future<List<OFStatistics>>
-            getStatistics(OFStatisticsRequest request) throws IOException {
-        assertTrue("Unexpected method call", false);
-        return null;
-    }
-    
+
     @Override
     public boolean isConnected() {
         assertTrue("Unexpected method call", false);
         return false;
     }
-    
-    @Override
-    public void setConnected(boolean connected) {
-        assertTrue("Unexpected method call", false);
-    }
-    
-    @Override
-    public Role getRole() {
-        assertTrue("Unexpected method call", false);
-        return null;
-    }
-    
-    @Override
-    public boolean isActive() {
-        assertTrue("Unexpected method call", false);
-        return false;
-    }
-    
-    @Override
-    public void deliverStatisticsReply(OFMessage reply) {
-        assertTrue("Unexpected method call", false);
-    }
-    
-    @Override
-    public void cancelStatisticsReply(int transactionId) {
-        assertTrue("Unexpected method call", false);
-    }
-    
-    @Override
-    public void cancelAllStatisticsReplies() {
-        assertTrue("Unexpected method call", false);
-    }
-    
+
     @Override
     public boolean hasAttribute(String name) {
         assertTrue("Unexpected method call", false);
         return false;
     }
-    
+
     @Override
     public Object getAttribute(String name) {
         assertTrue("Unexpected method call", false);
         return null;
     }
-    
+
     @Override
     public void setAttribute(String name, Object value) {
         assertTrue("Unexpected method call", false);
     }
-    
+
     @Override
     public Object removeAttribute(String name) {
         assertTrue("Unexpected method call", false);
         return null;
     }
-    
+
     @Override
-    public void clearAllFlowMods() {
-        assertTrue("Unexpected method call", false);
+    public long getBuffers() {
+        fail("Unexpected method call");
+        return 0;
+    }
+
+    @Override
+    public Set<OFActionType> getActions() {
+        fail("Unexpected method call");
+        return null;
+    }
+
+    @Override
+    public Set<OFCapabilities> getCapabilities() {
+        fail("Unexpected method call");
+        return null;
+    }
+
+    @Override
+    public short getNumTables() {
+        fail("Unexpected method call");
+        return 0;
     }
     
     @Override
-    public boolean updateBroadcastCache(Long entry, Short port) {
-        assertTrue("Unexpected method call", false);
+    public Collection<TableId> getTables() {
+    	fail("Unexpected method call");
+    	return null;
+    }
+
+    @Override
+    public boolean attributeEquals(String name, Object other) {
+        fail("Unexpected method call");
         return false;
     }
-    
-    @Override
-    public Map<Short, Long> getPortBroadcastHits() {
-        assertTrue("Unexpected method call", false);
-        return null;
-    }
-    
-    @Override
-    public void sendStatsQuery(OFStatisticsRequest request, int xid,
-                               IOFMessageListener caller)
-                                                         throws IOException {
-        assertTrue("Unexpected method call", false);
-    }
-    
-    @Override
-    public void flush() {
-        assertTrue("Unexpected method call", false);
-    }
 
     @Override
-    public Future<OFFeaturesReply> getFeaturesReplyFromSwitch()
-            throws IOException {
-        // TODO Auto-generated method stub
-        return null;
+    public boolean isActive() {
+        fail("Unexpected method call");
+        return false; // never reached
     }
 
-    @Override
-    public void deliverOFFeaturesReply(OFMessage reply) {
-        // TODO Auto-generated method stub
+	@Override
+	public boolean write(OFMessage m) {
+		writtenMessage = m;
+		return true;
+	}
 
-    }
+	@Override
+	public Collection<OFMessage> write(Iterable<OFMessage> msgList) {
+		return Collections.emptyList();
+	}
 
-    @Override
-    public void cancelFeaturesReply(int transactionId) {
-        // TODO Auto-generated method stub
+	@Override
+	public <R extends OFMessage> ListenableFuture<R> writeRequest(
+			OFRequest<R> request) {
+		// TODO Auto-generated method stub
+		return null;
+	}
 
-    }
+	@Override
+	public <REPLY extends OFStatsReply> ListenableFuture<List<REPLY>> writeStatsRequest(
+			OFStatsRequest<REPLY> request) {
+		// TODO Auto-generated method stub
+		return null;
+	}
 
-    @Override
-    public int getBuffers() {
-        // TODO Auto-generated method stub
-        return 0;
-    }
+	@Override
+	public SwitchStatus getStatus() {
+		// TODO Auto-generated method stub
+		return null;
+	}
 
-    @Override
-    public int getActions() {
-        // TODO Auto-generated method stub
-        return 0;
-    }
+	@Override
+	public void disconnect() {
+		// TODO Auto-generated method stub
+		
+	}
 
-    @Override
-    public int getCapabilities() {
-        // TODO Auto-generated method stub
-        return 0;
-    }
+	@Override
+	public SwitchDescription getSwitchDescription() {
+		// TODO Auto-generated method stub
+		return null;
+	}
 
-    @Override
-    public byte getTables() {
-        // TODO Auto-generated method stub
-        return 0;
-    }
+	@Override
+	public OFPortDesc getPort(OFPort portNumber) {
+		// TODO Auto-generated method stub
+		return null;
+	}
 
+	@Override
+	public Collection<OFPortDesc> getSortedPorts() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public boolean portEnabled(OFPort portNumber) {
+		// TODO Auto-generated method stub
+		return false;
+	}
+
+	@Override
+	public OFControllerRole getControllerRole() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public OFFactory getOFFactory() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public ImmutableList<IOFConnection> getConnections() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public boolean write(OFMessage m, LogicalOFMessageCategory category) {
+		return true;
+	}
+
+	@Override
+	public Collection<OFMessage> write(Iterable<OFMessage> msgList,
+			LogicalOFMessageCategory category) {
+		return Collections.emptyList();
+	}
+
+	@Override
+	public OFConnection getConnectionByCategory(
+			LogicalOFMessageCategory category) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public <REPLY extends OFStatsReply> ListenableFuture<List<REPLY>> writeStatsRequest(
+			OFStatsRequest<REPLY> request, LogicalOFMessageCategory category) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public <R extends OFMessage> ListenableFuture<R> writeRequest(
+			OFRequest<R> request, LogicalOFMessageCategory category) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public Collection<OFPortDesc> getEnabledPorts() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public Collection<OFPort> getEnabledPortNumbers() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public OFPortDesc getPort(String portName) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public Collection<OFPortDesc> getPorts() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public TableFeatures getTableFeatures(TableId table) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public U64 getLatency() {
+		// TODO Auto-generated method stub
+		return null;
+	}
 }
