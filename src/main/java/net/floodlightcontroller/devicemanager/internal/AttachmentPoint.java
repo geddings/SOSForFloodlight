@@ -21,10 +21,10 @@
 
 package net.floodlightcontroller.devicemanager.internal;
 
-import java.util.Date;
-
 import org.projectfloodlight.openflow.types.DatapathId;
 import org.projectfloodlight.openflow.types.OFPort;
+
+import java.util.Date;
 
 public class AttachmentPoint {
     DatapathId  sw;

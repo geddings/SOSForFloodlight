@@ -1,20 +1,15 @@
 package net.floodlightcontroller.dhcpserver.web;
 
+import net.floodlightcontroller.dhcpserver.DHCPInstance;
+import net.floodlightcontroller.dhcpserver.IDHCPService;
+import org.restlet.resource.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-
-import net.floodlightcontroller.dhcpserver.DHCPInstance;
-import net.floodlightcontroller.dhcpserver.IDHCPService;
-
-import org.restlet.resource.Delete;
-import org.restlet.resource.Get;
-import org.restlet.resource.Post;
-import org.restlet.resource.Put;
-import org.restlet.resource.ServerResource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class InstanceResource extends ServerResource {
 	private static final Logger log = LoggerFactory.getLogger(InstanceResource.class);

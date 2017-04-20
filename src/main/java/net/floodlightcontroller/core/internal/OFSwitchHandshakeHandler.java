@@ -27,6 +27,7 @@ import org.projectfloodlight.openflow.protocol.OFActionType;
 import org.projectfloodlight.openflow.protocol.OFBadRequestCode;
 import org.projectfloodlight.openflow.protocol.OFBarrierReply;
 import org.projectfloodlight.openflow.protocol.OFBarrierRequest;
+import org.projectfloodlight.openflow.protocol.OFBundleCtrlMsg;
 import org.projectfloodlight.openflow.protocol.OFControllerRole;
 import org.projectfloodlight.openflow.protocol.OFDescStatsReply;
 import org.projectfloodlight.openflow.protocol.OFDescStatsRequest;
@@ -494,15 +495,17 @@ public class OFSwitchHandshakeHandler implements IOFConnectionListener {
 					/* Only add the flow if the table exists and if it supports sending to the controller */
 					TableFeatures tf = this.sw.getTableFeatures(tid);
 					if (tf != null && (missCount < this.sw.getMaxTableForTableMissFlow().getValue())) {
-						for (OFActionId aid : tf.getPropApplyActionsMiss().getActionIds()) {
-							if (aid.getType() == OFActionType.OUTPUT) { /* The assumption here is that OUTPUT includes the special port CONTROLLER... */
-								OFFlowAdd defaultFlow = this.factory.buildFlowAdd()
-										.setTableId(tid)
-										.setPriority(0)
-										.setInstructions(Collections.singletonList((OFInstruction) this.factory.instructions().buildApplyActions().setActions(actions).build()))
-										.build();
-								flows.add(defaultFlow);
-								break; /* Stop searching for actions and go to the next table in the list */
+						if (tf.getPropApplyActionsMiss() != null) {
+							for (OFActionId aid : tf.getPropApplyActionsMiss().getActionIds()) {
+								if (aid.getType() == OFActionType.OUTPUT) { /* The assumption here is that OUTPUT includes the special port CONTROLLER... */
+									OFFlowAdd defaultFlow = this.factory.buildFlowAdd()
+											.setTableId(tid)
+											.setPriority(0)
+											.setInstructions(Collections.singletonList((OFInstruction) this.factory.instructions().buildApplyActions().setActions(actions).build()))
+											.build();
+									flows.add(defaultFlow);
+									break; /* Stop searching for actions and go to the next table in the list */
+								}
 							}
 						}
 					}
@@ -604,6 +607,10 @@ public class OFSwitchHandshakeHandler implements IOFConnectionListener {
 
 		void processOFNiciraControllerRoleRequest(OFNiciraControllerRoleRequest m) {
 			unhandledMessageWritten(m);
+		}
+
+		void processOFBundleCtrl(OFBundleCtrlMsg m) {
+			unhandledMessageReceived(m);
 		}
 
 		private final boolean handshakeComplete;
@@ -848,6 +855,9 @@ public class OFSwitchHandshakeHandler implements IOFConnectionListener {
 				break;
 			case ROLE_STATUS:
 				processOFRoleStatus((OFRoleStatus) m);
+				break;
+			case BUNDLE_CONTROL:
+				processOFBundleCtrl((OFBundleCtrlMsg) m);
 				break;
 			default:
 				illegalMessageReceived(m);
@@ -1486,6 +1496,11 @@ public class OFSwitchHandshakeHandler implements IOFConnectionListener {
 		@Override
 		void processOFStatsReply(OFStatsReply m) {
 			super.processOFStatsReply(m);
+		}
+
+		@Override
+		void processOFBundleCtrl(OFBundleCtrlMsg m) {
+			dispatchMessage(m);
 		}
 	}
 

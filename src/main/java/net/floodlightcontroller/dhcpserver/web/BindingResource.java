@@ -1,14 +1,13 @@
 package net.floodlightcontroller.dhcpserver.web;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import net.floodlightcontroller.dhcpserver.IDHCPService;
-
 import org.restlet.resource.Delete;
 import org.restlet.resource.Post;
 import org.restlet.resource.Put;
 import org.restlet.resource.ServerResource;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class BindingResource extends ServerResource {
 

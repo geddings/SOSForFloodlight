@@ -1,13 +1,9 @@
 package net.floodlightcontroller.statistics.web;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
-
+import net.floodlightcontroller.core.IOFSwitch;
 import net.floodlightcontroller.core.internal.IOFSwitchService;
 import net.floodlightcontroller.statistics.IStatisticsService;
 import net.floodlightcontroller.statistics.SwitchPortBandwidth;
-
 import org.projectfloodlight.openflow.protocol.OFPortDesc;
 import org.projectfloodlight.openflow.types.DatapathId;
 import org.projectfloodlight.openflow.types.OFPort;
@@ -15,6 +11,10 @@ import org.restlet.resource.Get;
 import org.restlet.resource.ServerResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 public class BandwidthResource extends ServerResource {
     private static final Logger log = LoggerFactory.getLogger(BandwidthResource.class);
@@ -66,7 +66,12 @@ public class BandwidthResource extends ServerResource {
                 spbs = new HashSet<SwitchPortBandwidth>(Collections.singleton(statisticsService.getBandwidthConsumption(dpid, port)));
             } else {
                 spbs = new HashSet<SwitchPortBandwidth>();
-                for (OFPortDesc pd : switchService.getSwitch(dpid).getPorts()) { /* do specific DPID; do all ports */
+                //fix concurrency scenario
+                IOFSwitch sw = switchService.getSwitch(dpid);
+                if (sw == null){
+                    return Collections.singletonMap("ERROR", "Switch was not online: " + dpid);
+                }
+                for (OFPortDesc pd : sw.getPorts()) { /* do specific DPID; do all ports */
                     SwitchPortBandwidth spb = statisticsService.getBandwidthConsumption(dpid, pd.getPortNo());
                     if (spb != null) {
                         spbs.add(spb);

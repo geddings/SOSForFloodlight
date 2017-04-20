@@ -1,13 +1,11 @@
 package net.floodlightcontroller.dhcpserver;
 
-import java.util.ArrayList;
-
 import org.projectfloodlight.openflow.types.IPv4Address;
 import org.projectfloodlight.openflow.types.MacAddress;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.floodlightcontroller.dhcpserver.DHCPBinding;
+import java.util.ArrayList;
 
 /**
  * The class representing a DHCP Pool.
